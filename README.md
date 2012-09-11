@@ -1,5 +1,5 @@
-Lua Restaurant
-======
+LuaRestaurant
+=============
 
 By Audra and Dylan McNamee
 
