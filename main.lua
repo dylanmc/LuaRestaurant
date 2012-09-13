@@ -19,6 +19,12 @@ revenue = 0
 timer = 120
 wallTime = 0.0
 
+-- patience functions (tweakable by restaurant modifications, later on)
+waitInLineImpatience = 1
+waitToOrderImpatience = 2
+waitForFoodImpatience = 3
+
+
 -- ------------------
 -- definition of the server
 -- ------------------
@@ -348,7 +354,7 @@ customer = {
     eatingSpeed = 10
 }
 
-customer.states = {"outside", "line", "choosing", "waitingFood", "eating"}
+customer.states = {"outside", "line", "choosing", "readyToOrder", "ordered", "eating"}
 
 customerCount = 1
 
@@ -374,9 +380,10 @@ function customer:draw()
             --love.graphics.print(self.name .. self.label, self.act_x + 5, self.act_y - 5)
         end
         love.graphics.print(self.state, self.act_x + 5, self.act_y - 5)
+        love.graphics.print("" .. math.floor(self.happiness) , self.act_x + 5, self.act_y + 5)
         if self.order ~= nil then
             love.graphics.setColor(self.order.color)
-            if self.state == "waiting" then
+            if self.state == "readyToOrder" then
                 love.graphics.rectangle("fill", self.act_x-8, self.act_y+5, 10, 10)
             else
                 love.graphics.rectangle("fill", self.act_x + self.width-5, self.act_y+5, 10, 10)                
@@ -401,10 +408,13 @@ end
 
 function customer:updateHappiness(dt)
     if self.state == "line" then
+        self.happiness = self.happiness - (dt * waitInLineImpatience)
     else 
-        if self.state == "waiting" then
+        if self.state == "readyToOrder" then
+            self.happiness = self.happiness - (dt * waitToOrderImpatience)
         else 
             if self.state == "ordered" then
+                self.happiness = self.happiness - (dt * waitForFoodImpatience)
             end
         end
     end
@@ -412,7 +422,7 @@ end
 
 function customer:payAndLeave()
     self.seatedAt.seatedCustomer = nil
-    self.seatedAt.tipAmount = 10 -- todo: fill this in based on happiness with experience.
+    self.seatedAt.tipAmount = (15 * self.happiness) / 100 -- todo: fill this in based on happiness with experience.
     self.seatedAt = nil
     self.grid_x = 0
     self.grid_y = 0
@@ -422,7 +432,7 @@ end
 
 -- we click on customers to take their order
 function customer:checkClick(x,y)
-    if self.state == "waiting" then
+    if self.state == "readyToOrder" then
         if checkClick(x,y,self.act_x,self.act_y,self.width, self.height) then
             print("get busy, server!")
             newServerAction(self.act_x - 20, self.act_y + 20, takeCustomerOrder, self, "take order")
@@ -445,7 +455,7 @@ function customer:seatAtTable(myTable)
 end
 
 function readyToOrder(cust)
-   cust.state = "waiting" 
+   cust.state = "readyToOrder" 
    cust.order = menuItems[1+math.random(3)]
 end
 
@@ -586,7 +596,7 @@ function love.update(dt)
     wallTime = wallTime + dt
     while (peekEventTime() < wallTime) do
         event = table.remove(timedEvents, 1)
-        -- print("processing " .. event.event)
+        print("processing " .. event.event)
         event.eventFunc(event.eventArg)
     end
     local i = 0
@@ -697,6 +707,10 @@ timeEvent = {
 }
 
 function createEvent(fromNow, name, func, arg) 
+    if func == nil then
+        print ("BLURG")
+        error ("blug")
+    end
     ret = table.copy(timeEvent)
     ret.time = wallTime + fromNow
     ret.event = name
