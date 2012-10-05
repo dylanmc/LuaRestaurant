@@ -32,7 +32,7 @@ waitForFoodImpatience = 3
 server = {
     act_x = 200,
     act_y = 200,
-    speed = 10, 
+    speed = 5, 
     carrying = {},
     color = {255,255,255,255}
 }
@@ -175,6 +175,8 @@ menuItems = {
 }
 
 -- if chefs become objects, we'll need to do things much closer to how servers work here...
+-- fascinating - is this a race?
+--    Error: main.lua:180: attempt to index local 'menuItem' (a nil value)
 function yellOrderToKitchen(menuItem,x,y)
     kitchenQueue:enqueue(menuItem)
     createEvent(menuItem.time, "done cooking", orderUp, menuItem)
@@ -311,7 +313,8 @@ function dinnerTable:draw()
     love.graphics.rectangle("fill",self.act_x,self.act_y,self.width,self.height)
     love.graphics.setColor(255,255,255)
     if self.tipAmount > 0 then
-        love.graphics.print("$" .. self.tipAmount, self.act_x + self.width - 15, self.act_y + 10)
+        tip = string.format("%.2f", self.tipAmount)
+        love.graphics.print("$" .. tip,  self.act_x + self.width - 15, self.act_y + 10)
     end
     -- love.graphics.print(self.state, self.act_x + 5, self.act_y + self.height - 10)
 end
@@ -613,7 +616,8 @@ end
 
 function love.draw()
     love.graphics.setColor(255,255,255)
-    love.graphics.print("Earnings: $" .. revenue .. "    Time left: " .. math.floor(timer), 500, 0)
+    rev = string.format("%.2f", revenue)
+    love.graphics.print("Earnings: $" .. rev .. "    Time left: " .. math.floor(timer), 500, 0)
     for i in values(drawables) do 
         i:draw()
     end
