@@ -1,4 +1,5 @@
 -- global definitions
+require "menu"
 
 dinnerTableCount = 4
 maxCustomerCount = dinnerTableCount + 4
@@ -15,8 +16,9 @@ kitchenQueue = nil
 servingCounter = nil
 plateQueue = nil
 revenue = 0
+openDuration = 90
 
-timer = 120
+timer = 10 -- 120
 wallTime = 0.0
 
 -- patience functions (tweakable by restaurant modifications, later on)
@@ -24,6 +26,14 @@ waitInLineImpatience = 1
 waitToOrderImpatience = 2
 waitForFoodImpatience = 3
 
+-- game modes: 
+-- 1: top-level menu
+-- 2: instructions
+-- 3: options?
+-- 4: store
+-- 5: gameplay
+
+mode = 1
 
 -- ------------------
 -- definition of the server
@@ -93,8 +103,10 @@ end
 
 function visitTable(toTable)
     -- if this table has an order for food we're carrying, deliver it
-    if toTable.seatedCustomer ~= nil then
+    if (toTable.seatedCustomer ~= nil) and (toTable.seatedCustomer.state=="ordered") then
         -- todo: refactor this -- too much repeated code, too many "customer" manipulations here in server
+        -- todo^2: we've got a race / bad logic - if customer hasn't ordered yet, but we're carrying
+        --         the thing they want, bad stuff happens
         if (server.carrying[1]~=nil) and (toTable.seatedCustomer.order == server.carrying[1].menuItem) then
             toTable.seatedCustomer.plateEatingFrom = server.carrying[1]
             putPlateOnTable(server.carrying[1], toTable)
@@ -125,6 +137,36 @@ function visitTable(toTable)
     end
 end
 
+-- take plate from serving counter (carry it), if I have a hand free
+function takePlate(plate)
+    local gotit=false
+    if server.carrying[1] == nil then
+        server.carrying[1] = plate
+        gotit = true
+    else
+        if server.carrying[2] == nil then
+            server.carrying[2] = plate
+            gotit=true
+        end
+    end
+    if gotit then
+        plate.onServingCounter=false
+        servingCounter:removeElement(plate)
+        kitchen:updateServingCounterPlates()
+        print("server taking plate...")
+    else
+        print("server hands full")
+    end
+end
+
+function putPlateOnTable(plate, toTable)
+    plate.act_x = toTable.act_x + 5
+    plate.act_y = toTable.act_y + 5
+    plate.grid_x = nil
+    plate.grid_y = nil
+    toTable.plateHere = plate
+end
+
 -- ------------------
 -- kitchen functions
 -- ------------------
@@ -141,22 +183,46 @@ function kitchen:draw()
     love.graphics.setColor(self.color)
     love.graphics.rectangle("fill",self.act_x,self.act_y,self.width,self.height)
     local posn = 1
-    for order in values(kitchenQueue) do 
+    for order in values(kitchenQueue.elements) do 
         love.graphics.setColor(order.color)
         love.graphics.rectangle("fill", self.act_x + self.width - 40, self.act_y + 5 + (posn * 15), 10, 10)
         posn = posn + 1
+    end
+    posn = 1
+    for plate in values(servingCounter.elements) do 
+        plate:drawOnCounter()
     end
 end
 
 function kitchen:updateServingCounterPlates()
     posn = 1
-    for plate in values(servingCounter) do 
-        print ("serving counter " .. posn)
-        plate.grid_x = self.act_x + 10 + (posn * 25)
+    for plate in values(servingCounter.elements) do 
+        plate.grid_x = self.act_x + 10 + (posn * (plate.width))
         plate.grid_y = self.act_y + 5
         posn = posn + 1
     end
 end    
+
+function kitchen:update(dt)
+    for plate in values(servingCounter.elements) do 
+        plate:updateOnCounter(dt)
+    end
+end
+
+function orderUp(menuItem)
+    print ("Order Up!")
+    food = kitchenQueue:dequeue() -- assuming one chef
+    plate = plateQueue:dequeue()
+    plate.menuItem = food
+    plate.onServingCounter = true
+    plate.act_x = kitchen.act_x + kitchen.width 
+    plate.act_y = kitchen.act_y + 5
+    plate.percentLeft = 100
+    servingCounter:enqueue(plate)
+    kitchen:updateServingCounterPlates()
+    return ret
+end
+
 -- kitchen note: the order isn't drawable, and chefs aren't either -- they're pure model objects,
 -- so they don't logically go in either the drawable queue or the updatable queue. Instead, their 
 -- actions are driven by the discrete event processing loop. 
@@ -175,24 +241,9 @@ menuItems = {
 }
 
 -- if chefs become objects, we'll need to do things much closer to how servers work here...
--- fascinating - is this a race?
---    Error: main.lua:180: attempt to index local 'menuItem' (a nil value)
 function yellOrderToKitchen(menuItem,x,y)
     kitchenQueue:enqueue(menuItem)
     createEvent(menuItem.time, "done cooking", orderUp, menuItem)
-end
-
-function orderUp(menuItem)
-    food = kitchenQueue:dequeue() -- assuming one chef
-    plate = plateQueue:dequeue()
-    plate.menuItem = food
-    plate.onServingCounter = true
-    plate.act_x = kitchen.act_x + kitchen.width 
-    plate.act_y = kitchen.act_y + 5
-    plate.percentLeft = 100
-    servingCounter:enqueue(plate)
-    kitchen:updateServingCounterPlates()
-    return ret
 end
 
 -- ------------------
@@ -203,8 +254,10 @@ plate = {
     menuItem = nil,
     trash = false,
     onServingCounter = false,
-    act_x = 0,
+    act_x = 0, 
     act_y = 0,
+    grid_x = 0,
+    grid_y = 0,
     -- no grid_x / grid_y because they don't move on their own, do they?
     color = {50,50,50,255},
     width = 35,
@@ -248,40 +301,20 @@ function plate:draw(x,y)
     end
 end
 
-function plate:update(dt)
-    if self.onServingCounter then
-        self.act_y = self.act_y - ((self.act_y - self.grid_y) * self.speed * dt)
-        self.act_x = self.act_x - ((self.act_x - self.grid_x) * self.speed * dt)
+function plate:updateOnCounter(dt)
+    self.act_y = self.act_y - ((self.act_y - self.grid_y) * self.speed * dt)
+    self.act_x = self.act_x - ((self.act_x - self.grid_x) * self.speed * dt)
+end
+
+function plate:drawOnCounter()
+    if self.menuItem ~= nil then
+        love.graphics.setColor(self.color)
+        love.graphics.rectangle("fill",self.act_x,self.act_y,self.width,self.height)
+        love.graphics.setColor(self.menuItem.color)
+        love.graphics.rectangle("fill",self.act_x+5,self.act_y+5,self.width-10,(self.height-10) * (self.percentLeft / 100))        
     end
 end
 
-function takePlate(plate)
-    local gotit=false
-    if server.carrying[1] == nil then
-        server.carrying[1] = plate
-        gotit = true
-    else
-        if server.carrying[2] == nil then
-            server.carrying[2] = plate
-            gotit=true
-        end
-    end
-    if gotit then
-        plate.onServingCounter=false
-        local posn = servingCounter:find(plate)
-        table.remove(servingCounter,posn)
-        kitchen:updateServingCounterPlates()
-        print("server taking plate...")
-    else
-        print("server hands full")
-    end
-end
-   
-function putPlateOnTable(plate, toTable)
-    plate.act_x = toTable.act_x + 5
-    plate.act_y = toTable.act_y + 5
-    toTable.plateHere = plate
-end
 
 -- ------------------    
 -- table functions
@@ -490,7 +523,7 @@ end
 
 function updateSeatingQueue(q)
     local posn = 1
-    for c in values(q) do 
+    for c in values(q.elements) do 
         c.grid_x = seatingQueueClickBox.frontX
         c.grid_y = seatingQueueClickBox.frontY - (posn * 50)
         posn = posn + 1
@@ -530,6 +563,10 @@ function timePasses()
         if math.random() > 0.75 then
             enterCustomer()
         end
+    else
+        if outsideQueue:size() == maxCustomerCount then
+            mode = 4
+        end
     end
 end
 
@@ -538,6 +575,7 @@ end
 -- ------------------
 
 function enterCustomer()
+    print("ding, ding")
     newCust = outsideQueue:dequeue()
     if newCust ~= nil then
         newCust.happiness = 100
@@ -553,6 +591,7 @@ function love.load()
     drawables = { }
     updatables = { server }
     clickables = { }
+    timedEvents = { }
     seatingQueue = newQueue()
     outsideQueue = newQueue()
     serverQueue = newQueue()
@@ -560,6 +599,10 @@ function love.load()
     servingCounter = newQueue()
     plateQueue = newQueue()
     
+    timer = 10 -- 120
+    wallTime = 0.0
+    revenue = 0
+
     local i = 0
     local newCust = nil
 
@@ -584,29 +627,38 @@ function love.load()
         newPlate = table.copy(plate)
         table.insert(drawables, newPlate)
         table.insert(clickables, newPlate)
-        table.insert(plateQueue, newPlate)
-        table.insert(updatables, newPlate)
+        -- table.insert(updatables, newPlate)
+        plateQueue:enqueue(newPlate)
     end
     enterCustomer()
     createEvent(2, "bootstrap time", timePasses, nil)
     table.insert(drawables, server)
     table.insert(drawables, seatingQueueClickBox) -- for debugging
     table.insert(clickables, seatingQueueClickBox)
+    table.insert(updatables, kitchen) -- used to update plate positions (conveyer belt?)
+    
+    menu:initialize()
     print("done loading")
 end
 
 function love.update(dt)
-    wallTime = wallTime + dt
-    while (peekEventTime() < wallTime) do
-        event = table.remove(timedEvents, 1)
-        print("processing " .. event.event)
-        event.eventFunc(event.eventArg)
+    if mode == 1 then
+        menu:update(dt)
+    else 
+        if mode == 5 then
+            wallTime = wallTime + dt
+            while (peekEventTime() < wallTime) do
+                event = table.remove(timedEvents, 1)
+                print("processing " .. event.event)
+                event.eventFunc(event.eventArg)
+            end
+            local i = 0
+            for i in values(updatables) do 
+                i:update(dt)
+            end
+            timer = timer - dt
+        end
     end
-    local i = 0
-    for i in values(updatables) do 
-        i:update(dt)
-    end
-    timer = timer - dt
 end
 
 function values(t)
@@ -615,34 +667,49 @@ function values(t)
 end
 
 function love.draw()
-    love.graphics.setColor(255,255,255)
-    rev = string.format("%.2f", revenue)
-    love.graphics.print("Earnings: $" .. rev .. "    Time left: " .. math.floor(timer), 500, 0)
-    for i in values(drawables) do 
-        i:draw()
+    if mode == 1 then
+        menu:draw()
+    else 
+        if mode == 5 then
+            love.graphics.setColor(255,255,255)
+            rev = string.format("%.2f", revenue)
+            love.graphics.print("Earnings: $" .. rev .. "    Time left: " .. math.floor(timer), 500, 0)
+            for i in values(drawables) do 
+                i:draw()
+            end
+        end
     end
 end
 
 function love.keypressed(key)
-    if key == "q" then
-        os.exit()
+    if key == "escape" then
+        mode = 1
+        print ("mode ".. mode)
+    else
+        print (key)
     end
 end
 
 function love.mousepressed(x, y, button)
-   if button == 'l' then
-       for i in values(clickables) do 
-           i:checkClick(x,y)
+   if mode == 5 then
+       if button == 'l' then
+           for i in values(clickables) do 
+               i:checkClick(x,y)
+           end
        end
-   end
+    else
+        if mode == 1 then
+            menu:mousePressed(x,y,button)
+        end
+    end
 end
 
 -- utility functions (Lua's a very "roll your own" language)
 function checkClick(x,y,objX,objY,objWidth,objHeight)
-    if x > objX then
-        if y > objY then
-            if x < objX + objWidth then
-                if y < objY + objHeight then
+    if x >= objX then
+        if y >= objY then
+            if x <= objX + objWidth then
+                if y <= objY + objHeight then
                     return true
                 end
             end
@@ -651,6 +718,7 @@ function checkClick(x,y,objX,objY,objWidth,objHeight)
     return false
 end
 
+--  rolling my own prototype-based object system
 function table.copy(t, deep, seen)
     seen = seen or {}
     if t == nil then return nil end
@@ -671,29 +739,35 @@ end
 
 -- queue functions
 queue = {
+    myCount = 0,
+    elements = {}
 }
 
 function newQueue()
-    nq = table.copy(queue, false)
+    nq = table.copy(queue, true)
     return nq
 end
 
 function queue:enqueue(obj)
-    table.insert(self, obj)
+    table.insert(self.elements, obj)
+    self.myCount = self.myCount + 1
+    -- print ("enqueue - count " .. self.myCount)
 end
 
 function queue:dequeue()
-    ret = table.remove(self,1)
+    ret = table.remove(self.elements,1)
+    self.myCount = self.myCount - 1
+    -- print ("dequeue - count " .. self.myCount)
     return ret
 end
 
 function queue:peekAtFirst()
-    return self[1]
+    return self.elements[1]
 end
 
 function queue:find(elt)
     posn = 1
-    for val in values(self) do
+    for val in values(self.elements) do
         if val == elt then 
             return posn
         end
@@ -701,8 +775,22 @@ function queue:find(elt)
     return -1
 end
 
+function queue:size()
+    return self.myCount
+end
+
+function queue:removeElement(elt)
+    posn = self:find(elt)
+    if posn >= 0 then
+        table.remove(self.elements, posn)
+        self.myCount = self.myCount - 1
+        return true
+    end
+    return false
+end
 -- event queue functions - these are the time-based events
 timedEvents = {}
+
 timeEvent = {
     time = nil, -- the time to do the event
     event = nil, -- a string describing the event

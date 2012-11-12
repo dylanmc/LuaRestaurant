@@ -1,5 +1,7 @@
 -- menu functions
 
+menu_initialized = false
+
 menu = {	
 	drawables = {},
 	clickables = {},
@@ -7,7 +9,10 @@ menu = {
 }
 
 function menu:initialize()
-	createButtons()
+	if menu_initialized ~= true then
+		createButtons()
+		menu_initialized = true
+	end
 end
 
 function menu:update(dt)
@@ -34,6 +39,7 @@ end
 
 function newGameAction()
 	-- todo: re-init everything
+	love.load()
 	mode = 5
 end
 
