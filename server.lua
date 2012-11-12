@@ -66,27 +66,29 @@ end
 
 function visitTable(toTable)
 	-- if this table has an order for food we're carrying, deliver it
-	if (toTable.seatedCustomer ~= nil) and (toTable.seatedCustomer.state=="ordered") then
-		-- todo: refactor this -- too much repeated code, too many "customer" manipulations here in server
-		-- todo^2: we've got a race / bad logic - if customer hasn't ordered yet, but we're carrying
-		--         the thing they want, bad stuff happens
-		if (server.carrying[1]~=nil) and (toTable.seatedCustomer.order == server.carrying[1].menuItem) then
-			toTable.seatedCustomer.plateEatingFrom = server.carrying[1]
-			putPlateOnTable(server.carrying[1], toTable)
-			server.carrying[1] = nil
-			toTable.seatedCustomer.order = nil
-			toTable.seatedCustomer.state = "eating"
-			numTablesWithPlates = numTablesWithPlates + 1
-		else
-			if (server.carrying[2]~=nil) and (toTable.seatedCustomer.order == server.carrying[2].menuItem) then
-				toTable.seatedCustomer.plateEatingFrom = server.carrying[2]
-				putPlateOnTable(server.carrying[2], toTable)
-				server.carrying[2] = nil
+	if (toTable.seatedCustomer ~= nil) then
+		if (toTable.seatedCustomer.state=="ordered") then
+			-- todo: refactor this -- too much repeated code, too many "customer" manipulations here in server
+			-- todo^2: we've got a race / bad logic - if customer hasn't ordered yet, but we're carrying
+			--         the thing they want, bad stuff happens
+			if (server.carrying[1]~=nil) and (toTable.seatedCustomer.order == server.carrying[1].menuItem) then
+				toTable.seatedCustomer.plateEatingFrom = server.carrying[1]
+				putPlateOnTable(server.carrying[1], toTable)
+				server.carrying[1] = nil
 				toTable.seatedCustomer.order = nil
 				toTable.seatedCustomer.state = "eating"
 				numTablesWithPlates = numTablesWithPlates + 1
+			else
+				if (server.carrying[2]~=nil) and (toTable.seatedCustomer.order == server.carrying[2].menuItem) then
+					toTable.seatedCustomer.plateEatingFrom = server.carrying[2]
+					putPlateOnTable(server.carrying[2], toTable)
+					server.carrying[2] = nil
+					toTable.seatedCustomer.order = nil
+					toTable.seatedCustomer.state = "eating"
+					numTablesWithPlates = numTablesWithPlates + 1
+				end
 			end
-		end
+		end -- else would be interrupting an eating customer ... not helpful
 	else -- no customer here, check for trash and/or tip
 		if toTable.tipAmount > 0 then
 			revenue = revenue + toTable.tipAmount
@@ -103,6 +105,8 @@ function visitTable(toTable)
 	end
 end
 
+-- TODO: seems to be doing something wrong when you don't click on the front element of the queue
+-- FIXME
 -- take plate from serving counter (carry it), if I have a hand free
 function takePlate(plate)
 	local gotit=false

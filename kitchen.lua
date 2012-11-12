@@ -20,6 +20,7 @@ function kitchen:draw()
 		posn = posn + 1
 	end
 	posn = 1
+	local plate = nil
 	for plate in values(servingCounter.elements) do 
 		plate:drawOnCounter()
 	end

@@ -10,7 +10,6 @@ plate = {
 	act_y = 0,
 	grid_x = 0,
 	grid_y = 0,
-	-- no grid_x / grid_y because they don't move on their own, do they?
 	color = {50,50,50,255},
 	width = 35,
 	height = 35,

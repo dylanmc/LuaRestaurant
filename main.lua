@@ -13,10 +13,6 @@ require "plate"
 require "seatingQueue"
 require "server"
 
-kitchenTable = {}
-dish = {}
-trash = {}
-bussStation = {}
 selectedCustomer = nil
 serverQueue = nil
 kitchenQueue = nil
