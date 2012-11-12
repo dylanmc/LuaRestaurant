@@ -1,12 +1,12 @@
 -- global definitions
 require "menu"
+require "dinnerTable"
 
 dinnerTableCount = 4
 maxCustomerCount = dinnerTableCount + 4
 plateCount = dinnerTableCount + maxCustomerCount
 
 kitchenTable = {}
-dinnerTable = {}
 dish = {}
 trash = {}
 bussStation = {}
@@ -17,6 +17,7 @@ servingCounter = nil
 plateQueue = nil
 revenue = 0
 openDuration = 90
+numTablesWithPlates = 0
 
 timer = 10 -- 120
 wallTime = 0.0
@@ -113,6 +114,7 @@ function visitTable(toTable)
             server.carrying[1] = nil
             toTable.seatedCustomer.order = nil
             toTable.seatedCustomer.state = "eating"
+            numTablesWithPlates = numTablesWithPlates + 1
         else
             if (server.carrying[2]~=nil) and (toTable.seatedCustomer.order == server.carrying[2].menuItem) then
                 toTable.seatedCustomer.plateEatingFrom = server.carrying[2]
@@ -120,6 +122,7 @@ function visitTable(toTable)
                 server.carrying[2] = nil
                 toTable.seatedCustomer.order = nil
                 toTable.seatedCustomer.state = "eating"
+                numTablesWithPlates = numTablesWithPlates + 1
             end
         end
     else -- no customer here, check for trash and/or tip
@@ -132,6 +135,7 @@ function visitTable(toTable)
             toTable.plateHere.trash = false
             plateQueue:enqueue(toTable.plateHere)
             toTable.plateHere = nil
+            numTablesWithPlates = numTablesWithPlates - 1
         end
         toTable.state = "empty"
     end
@@ -316,57 +320,6 @@ function plate:drawOnCounter()
 end
 
 
--- ------------------    
--- table functions
--- ------------------
-
-dinnerTable.states = { empty = "empty", customers = "customers", dirty = "dirty"}
-
-dinnerTable = {
-    act_x = 300,
-    act_y = 300,
-    color = {128,128,128},
-    width = 75,
-    height = 75,
-    state = "empty",
-    seatedCustomer = nil,
-    tipAmount = 0,
-    plateHere = nil
-}
-
-
-function newDinnerTable(number)
-    local nt = table.copy(dinnerTable, true)
-    nt.act_y = nt.act_y - (number * 100)
-    return nt
-end
-
-function dinnerTable:draw()
-    love.graphics.setColor(self.color)
-    love.graphics.rectangle("fill",self.act_x,self.act_y,self.width,self.height)
-    love.graphics.setColor(255,255,255)
-    if self.tipAmount > 0 then
-        tip = string.format("%.2f", self.tipAmount)
-        love.graphics.print("$" .. tip,  self.act_x + self.width - 15, self.act_y + 10)
-    end
-    -- love.graphics.print(self.state, self.act_x + 5, self.act_y + self.height - 10)
-end
-
-function dinnerTable:checkClick(x,y)
-    if checkClick(x,y,self.act_x,self.act_y,self.width, self.height) then
-        if selectedCustomer ~= nil then
-            if self.state == "empty" then
-                selectedCustomer:seatAtTable(self)
-            else
-                selectedCustomer.selected = false
-                selectedCustomer = nil
-            end
-        else 
-            newServerAction(self.act_x, self.act_y, visitTable, self, "what's going on here")
-        end    
-    end
-end
-
 -- ------------------
 -- customer functions
 -- ------------------
@@ -463,6 +416,7 @@ function customer:payAndLeave()
     self.grid_x = 0
     self.grid_y = 0
     self.state = "leaving"
+    print("thanks for the meal!")
     outsideQueue:enqueue(self)
 end
 
@@ -557,15 +511,19 @@ function seatingQueueClickBox:draw()
 end
 
 function timePasses()
-    -- print(".")
+    print(".")
+    createEvent(1, "time passes", timePasses, nil)
+    print("#outside: " .. outsideQueue:size() .. ", tables with plates " .. numTablesWithPlates)
+
     if timer > 0 then
-        createEvent(1, "time passes", timePasses, nil)
         if math.random() > 0.75 then
             enterCustomer()
         end
-    else
+    else -- check to see whether this round is over
         if outsideQueue:size() == maxCustomerCount then
-            mode = 4
+            if numTablesWithPlates == 0 then
+                mode = 1 -- TODO
+            end
         end
     end
 end
@@ -608,19 +566,20 @@ function love.load()
 
     table.insert(drawables, kitchen)
 
-    for i = 0, dinnerTableCount do 
+    for i = 1, dinnerTableCount do 
         newTable = newDinnerTable(i)
         table.insert(tables, newTable)
         table.insert(drawables, newTable)
         table.insert(clickables, newTable)
     end
-    for i = 0, maxCustomerCount do 
+    for i = 1, maxCustomerCount do 
         newCust = newCustomer(i) 
         table.insert(customers, newCust)
         table.insert(drawables, newCust)
         table.insert(clickables, newCust)
         table.insert(updatables, newCust)
         outsideQueue:enqueue(newCust)
+        print("customer " .. i .. " has entered the game")
     end
     
     for i = 0, plateCount do
@@ -638,7 +597,7 @@ function love.load()
     table.insert(updatables, kitchen) -- used to update plate positions (conveyer belt?)
     
     menu:initialize()
-    print("done loading")
+    print("done loading ")
 end
 
 function love.update(dt)
@@ -691,6 +650,9 @@ function love.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+   if button == 'lshift' then
+        print ("x: ".. x .. ", y:" .. y)
+   end
    if mode == 5 then
        if button == 'l' then
            for i in values(clickables) do 
