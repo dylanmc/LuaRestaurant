@@ -158,7 +158,7 @@ function love.update(dt)
             wallTime = wallTime + dt
             while (peekEventTime() < wallTime) do
                 event = table.remove(timedEvents, 1)
-                print("processing " .. event.event)
+                -- print("processing " .. event.event)
                 event.eventFunc(event.eventArg)
             end
             local i = 0

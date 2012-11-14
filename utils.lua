@@ -65,6 +65,7 @@ function queue:find(elt)
 		if val == elt then 
 			return posn
 		end
+		posn = posn + 1
 	end
 	return -1
 end
@@ -75,7 +76,8 @@ end
 
 function queue:removeElement(elt)
 	posn = self:find(elt)
-	if posn >= 0 then
+	print ("found elt at position " .. posn)
+	if posn >= 1 then
 		table.remove(self.elements, posn)
 		self.myCount = self.myCount - 1
 		return true
