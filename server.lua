@@ -105,8 +105,6 @@ function visitTable(toTable)
 	end
 end
 
--- TODO: seems to be doing something wrong when you don't click on the front element of the queue
--- FIXME
 -- take plate from serving counter (carry it), if I have a hand free
 function takePlate(plate)
 	local gotit=false
